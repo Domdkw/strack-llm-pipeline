@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strack LLM Pipeline - 测试界面</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #4c8dff;
+    --green: #3ecf8e;
+    --red: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  #status { font-size: 12px; color: var(--muted); }
+  #status.online { color: var(--green); }
+  #status.offline { color: var(--red); }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 0;
+  }
+  aside {
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--panel);
+  }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 84px; }
+  button {
+    cursor: pointer;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .88; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--border); font-weight: 400; }
+  .row { display: flex; gap: 8px; }
+  .row > * { width: 100%; }
+  .check { display: flex; align-items: center; gap: 6px; }
+  .check input { width: auto; }
+  .check label { margin: 0; color: var(--text); font-size: 13px; }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  #preview {
+    display: none;
+    max-width: 100%;
+    max-height: 120px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  #queueBox {
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    color: var(--muted);
+  }
+  section.log {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .msg {
+    max-width: 78%;
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .msg.user { align-self: flex-end; background: #24334d; }
+  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
+  .msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 12px; padding: 2px; }
+  .msg.error { align-self: center; color: var(--red); background: transparent; font-size: 12px; }
+  #raw {
+    border-top: 1px solid var(--border);
+    max-height: 150px;
+    overflow-y: auto;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 8px 16px;
+    white-space: pre-wrap;
+  }
+  .sendbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .sendbar textarea { min-height: 44px; }
+  .sendbar button { width: 110px; flex: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Strack LLM Pipeline 测试界面</h1>
+  <span id="status" class="offline">未连接</span>
+  <div style="margin-left:auto" class="row">
+    <input id="wsUrl" value="ws://localhost:8000/api/v1/ws" style="width:300px">
+    <button id="connectBtn" class="ghost" style="width:90px">连接</button>
+    <button id="modelsBtn" class="ghost" style="width:100px">刷新模型</button>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <div>
+      <label>模型类型</label>
+      <select id="modelType">
+        <option value="chat">chat</option>
+        <option value="ocr">ocr</option>
+      </select>
+    </div>
+    <div>
+      <label>模型名称</label>
+      <select id="modelName"></select>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="thinkMode">
+      <label for="thinkMode">think_mode</label>
+    </div>
+
+    <div id="ocrBox" style="display:none">
+      <label>OCR 图片</label>
+      <input type="file" id="imageFile" accept="image/*">
+      <img id="preview" alt="预览">
+      <p class="hint">图片会转换为 data:image/...;base64,... 后发送。</p>
+    </div>
+
+    <div>
+      <label>队列</label>
+      <button id="queueBtn" class="ghost">查询队列状态</button>
+      <div id="queueBox">-</div>
+    </div>
+
+    <p class="hint">
+      发送 chat 请求走文字输入；选择 ocr 时发送图片。<br>
+      服务端逐 chunk 返回，助手消息会实时追加。
+    </p>
+  </aside>
+
+  <section class="log">
+    <div id="log"></div>
+    <div id="raw"></div>
+    <div class="sendbar">
+      <textarea id="input" placeholder="输入消息，Ctrl+Enter 发送"></textarea>
+      <button id="sendBtn">发送</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = { ws: null, models: {}, imageData: null, lastBubble: null };
+
+  const logEl = $("log");
+  const rawEl = $("raw");
+
+  function setStatus(text, cls) {
+    const el = $("status");
+    el.textContent = text;
+    el.className = cls || "";
+  }
+
+  function addMsg(role, text, meta) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    if (meta) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = meta;
+      div.appendChild(m);
+    }
+    const body = document.createElement("span");
+    body.className = "body";
+    body.textContent = text;
+    div.appendChild(body);
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+    return div;
+  }
+
+  function raw(obj) {
+    rawEl.textContent = JSON.stringify(obj, null, 2);
+  }
+
+  async function loadModels() {
+    try {
+      const res = await fetch(state.baseHttp + "/api/v1/models");
+      state.models = await res.json();
+      renderModelNames();
+    } catch (e) {
+      addMsg("error", "获取模型列表失败: " + e.message);
+    }
+  }
+
+  function renderModelNames() {
+    const type = $("modelType").value;
+    const select = $("modelName");
+    const names = state.models.models || [];
+    select.innerHTML = "";
+    names.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+    if (!names.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "(无可用模型)";
+      select.appendChild(opt);
+    }
+  }
+
+  function connect() {
+    if (state.ws) {
+      state.ws.close();
+      return;
+    }
+    const url = $("wsUrl").value.trim();
+    try {
+      state.baseHttp = url.replace(/^ws/, "http").replace(/\/api\/v1\/ws.*$/, "");
+      state.ws = new WebSocket(url);
+    } catch (e) {
+      addMsg("error", "WebSocket 地址无效: " + e.message);
+      return;
+    }
+    state.ws.onopen = () => {
+      setStatus("已连接", "online");
+      $("connectBtn").textContent = "断开";
+      loadModels();
+    };
+    state.ws.onclose = () => {
+      setStatus("未连接", "offline");
+      $("connectBtn").textContent = "连接";
+      state.ws = null;
+    };
+    state.ws.onerror = () => addMsg("error", "WebSocket 连接错误");
+    state.ws.onmessage = onMessage;
+  }
+
+  function onMessage(ev) {
+    let data;
+    try { data = JSON.parse(ev.data); } catch { return; }
+    raw(data);
+
+    if (data.type === "llm") {
+      const text = data.content && data.content.chunk;
+      if (!text) return;
+      if (!state.lastBubble) {
+        state.lastBubble = addMsg("assistant", "", data.model_type + " · tid " + String(data.tid).slice(0, 8));
+      }
+      state.lastBubble.querySelector(".body").textContent += text;
+      logEl.scrollTop = logEl.scrollHeight;
+    } else if (data.type === "queue") {
+      const c = data.content || {};
+      $("queueBox").textContent =
+        "model_type: " + data.model_type +
+        "\n等待任务: " + c.size + " / " + c.maxsize +
+        "\n我的排队位置: " + (c.position == null ? "不在队列中" : c.position);
+    } else {
+      addMsg("sys", JSON.stringify(data));
+    }
+  }
+
+  function send() {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+      addMsg("error", "请先连接 WebSocket");
+      return;
+    }
+    const modelType = $("modelType").value;
+    const modelName = $("modelName").value;
+    if (!modelName) {
+      addMsg("error", "没有可用模型");
+      return;
+    }
+
+    let payload;
+    if (modelType === "ocr") {
+      if (!state.imageData) {
+        addMsg("error", "请选择 OCR 图片");
+        return;
+      }
+      payload = {
+        type: "llm",
+        model_type: "ocr",
+        model_name: modelName,
+        input_type: "image",
+        user_input: state.imageData,
+        think_mode: $("thinkMode").checked,
+      };
+      addMsg("user", "[图片] " + ($("imageFile").files[0]?.name || ""));
+    } else {
+      const text = $("input").value.trim();
+      if (!text) return;
+      payload = {
+        type: "llm",
+        model_type: "chat",
+        model_name: modelName,
+        input_type: "text",
+        user_input: text,
+        think_mode: $("thinkMode").checked,
+      };
+      addMsg("user", text);
+      $("input").value = "";
+    }
+
+    state.lastBubble = null;
+    state.ws.send(JSON.stringify(payload));
+    raw(payload);
+    setTimeout(queryQueue, 50);
+  }
+
+  function queryQueue() {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+    const payload = { type: "queue", model_type: $("modelType").value };
+    state.ws.send(JSON.stringify(payload));
+  }
+
+  $("connectBtn").onclick = connect;
+  $("modelsBtn").onclick = loadModels;
+  $("sendBtn").onclick = send;
+  $("queueBtn").onclick = queryQueue;
+  $("modelType").onchange = () => {
+    $("ocrBox").style.display = $("modelType").value === "ocr" ? "block" : "none";
+    renderModelNames();
+  };
+
+  $("imageFile").onchange = (e) => {
+    const file = e.target.files[0];
+    state.imageData = null;
+    $("preview").style.display = "none";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.imageData = reader.result;
+      $("preview").src = reader.result;
+      $("preview").style.display = "block";
+    };
+    reader.readAsDataURL(file);
+  };
+
+  $("input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      send();
+    }
+  });
+
+  state.baseHttp = "http://localhost:8000";
+  addMsg("sys", "点击右上角“连接”开始测试。");
+})();
+</script>
+</body>
+</html>

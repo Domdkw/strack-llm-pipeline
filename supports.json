@@ -1,0 +1,72 @@
+{
+    "chat": [
+        {
+            "name": "Qwen3-0.6B",
+            "models": [
+                {
+                    "modelscope_id": "unsloth/Qwen3-0.6B-GGUF",
+                    "folder": "Qwen3-0.6B",
+                    "files": [
+                        {
+                            "name": "Qwen3-0.6B-Q4_K_M.gguf",
+                            "type": "gguf",
+                            "size": 396705472
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "ocr": [
+        {
+            "name": "PaddleOCR-VL-1.6",
+            "models": [
+                {
+                    "modelscope_id": "PaddlePaddle/PaddleOCR-VL-1.6-GGUF",
+                    "folder": "PaddleOCR-VL-1.6",
+                    "files": [
+                        {
+                            "name": "PaddleOCR-VL-1.6-GGUF.gguf",
+                            "type": "gguf",
+                            "size": 935769056
+                        },
+                        {
+                            "name": "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+                            "type": "mmproj",
+                            "size": 881770560
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "tts": [
+        {
+            "name": "MOSS-TTS-Nano-100M",
+            "models": [
+                {
+                    "folder": "MOSS-TTS-Nano-100M-ONNX",
+                    "modelscope_id": "openmoss/MOSS-TTS-Nano-100M-ONNX",
+                    "files": [
+                        {
+                            "name": "moss_tts_local_shared.data",
+                            "type": "onnx",
+                            "size": 229678080
+                        }
+                    ]
+                },
+                {
+                    "folder": "MOSS-Audio-Tokenizer-Nano-ONNX",
+                    "modelscope_id": "openmoss/MOSS-Audio-Tokenizer-Nano-ONNX",
+                    "files": [
+                        {
+                            "name": "moss_audio_tokenizer_decode_shared.data",
+                            "type": "onnx",
+                            "size": 44198912
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
