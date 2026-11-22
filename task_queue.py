@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import asyncio
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from model_bootstrap import create_chat_model, create_ocr_model
+from model_bootstrap import create_chat_model, create_ocr_model, close_ocr_model
 from configs import get_setting_models
 import base64
 import binascii
@@ -143,7 +143,12 @@ async def _stream_task(task: Task, invoke: callable):
                 "content": { "chunk": text },
             })
     finally:
-        task.result = await work
+        try:
+            task.result = await work
+        finally:
+            # OCR 队列已空则关闭模型
+            if task.model_instance.instance_type == "ocr" and ocr_queue.qsize() == 0:
+                close_ocr_model(task.model_instance)
     return task.result
 
 async def chat_worker():
@@ -170,6 +175,8 @@ async def ocr_worker():
             content = await _stream_task(task, lambda: task.model_instance.recognize(task.messages[0]["content"], max_tokens=1024))
             task.result = content
             task.status = "done"
+            if task.on_result:
+                task.on_result(content)
         except Exception:
             task.status = "failed"
         finally:

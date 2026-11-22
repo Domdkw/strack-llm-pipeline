@@ -45,3 +45,10 @@ def create_ocr_model(model_name: str):
         temperature, n = build_llama_params()
         ocr_completion = OCRModel(gguf_path, mmproj_path, jinja_path, temperature=temperature, n=n)
     return ocr_completion
+
+def close_ocr_model(model_instance) -> None:
+    """关闭 OCR 模型；若仍是缓存实例则同步清空缓存，避免后续任务复用已关闭实例。"""
+    global ocr_completion
+    if ocr_completion is model_instance:
+        ocr_completion = None
+    model_instance.close()
