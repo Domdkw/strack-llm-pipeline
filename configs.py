@@ -2,8 +2,8 @@ import json
 import sys
 import os
 
+from utils import ROOT_DIR
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 default_setting = {
     "use_models": {
         "chat": [],

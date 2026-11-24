@@ -1,16 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import asyncio
+import os
 from dataclasses import dataclass
-from contextlib import asynccontextmanager
-from model_bootstrap import create_chat_model, create_ocr_model, close_ocr_model
+from model_bootstrap import create_chat_model, create_ocr_model, close_ocr_model, create_tts_model
 from configs import get_setting_models
+from utils import ROOT_DIR
 import base64
 import binascii
 
 if TYPE_CHECKING:
-    from llama_runtime import ModelInstance
+    from plugin_mount import ModelInstance
     from fastapi import WebSocket
+
+# test  TTS 音色克隆使用的内置参考音频
+TTS_PROMPT_AUDIO = os.path.join(ROOT_DIR, "test", "prompt_audio.mp3")
 
 @dataclass
 class Task:
@@ -24,6 +28,7 @@ class Task:
 
 chat_queue = asyncio.Queue[Task](maxsize=100)
 ocr_queue = asyncio.Queue[Task](maxsize=10)
+tts_queue = asyncio.Queue[Task](maxsize=3)
 
 def _detect_image_mime(data: bytes) -> str | None:
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -64,6 +69,8 @@ def queue_status(model_type: str, tid: str | None = None) -> dict:
         queue = chat_queue
     elif model_type == "ocr":
         queue = ocr_queue
+    elif model_type == "tts":
+        queue = tts_queue
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
     pending_tids = [task.tid for task in queue._queue]
@@ -101,6 +108,17 @@ def add_task(tid: str, model_type: str, model_name: str, ws: WebSocket, messages
             model_instance=model_instance,
             ws_instance=ws,
             messages=[{"role": "user", "content": content}],
+        ))
+    elif model_type == "tts":
+        if not messages or not str(messages[0].get("content", "")).strip():
+            raise ValueError("TTS input text must not be empty")
+        model_instance = create_tts_model(model_name)
+        tts_queue.put_nowait(Task(
+            tid=tid,
+            model_instance=model_instance,
+            ws_instance=ws,
+            messages=list[dict](messages),
+            on_result=on_result,
         ))
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
@@ -181,3 +199,42 @@ async def ocr_worker():
             task.status = "failed"
         finally:
             ocr_queue.task_done()
+
+def _synthesize(task: Task) -> dict:
+    """在阻塞线程中执行 TTS 音色克隆，返回音频 URL 与采样率。"""
+    if not os.path.isfile(TTS_PROMPT_AUDIO):
+        raise FileNotFoundError(f"TTS prompt audio not found: {TTS_PROMPT_AUDIO}")
+    text = str(task.messages[0].get("content", "")).strip()
+    output_dir = os.path.join(ROOT_DIR, "public", "tts")
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{task.tid}.wav")
+    result = task.model_instance.synthesize(
+        text=text,
+        prompt_audio_path=TTS_PROMPT_AUDIO,
+        output_audio_path=output_path,
+    )
+    return {
+        "url": f"/public/tts/{task.tid}.wav",
+        "sample_rate": int(result["sample_rate"]),
+    }
+
+async def tts_worker():
+    while True:
+        task = await tts_queue.get()
+        try:
+            task.status = "running"
+            result = await asyncio.to_thread(_synthesize, task)
+            task.result = result["url"]
+            task.status = "done"
+            await task.ws_instance.send_json({
+                "type": "tts",
+                "tid": task.tid,
+                "model_type": "tts",
+                "content": result,
+            })
+            if task.on_result:
+                task.on_result(result["url"])
+        except Exception:
+            task.status = "failed"
+        finally:
+            tts_queue.task_done()

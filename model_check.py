@@ -1,10 +1,21 @@
 import os
-from configs import get_target_support_model
+from configs import get_target_support_model, get_setting_models
+from utils import MODEL_DIR as MODELS_DIR
 from modelscope_hub import HubApi, RepoType
 
 
-MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 hub_api = HubApi()
+
+def scan_models():
+    used_models = get_setting_models('all')
+    if not used_models:
+        print("[scan] use_models: skip scan.")
+        return
+    print(f"[scan] 检查模型: {', '.join(used_models)}")
+    for model_name in used_models:
+        if not has_model(model_name):
+            print(f"[scan] {model_name} 未安装，开始下载。")
+            download_model(model_name)
 
 def has_model(model_name: str, model_type: str = 'all') -> bool:
     target_model = get_target_support_model(model_type, model_name)

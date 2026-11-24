@@ -1,27 +1,21 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 import asyncio
 import uvicorn
 from contextlib import asynccontextmanager
 
-from model_check import has_model, download_model
-from configs import get_setting_models
+from model_check import scan_models
+from utils import create_web_dir
 from llm_service import api
-from task_queue import chat_worker, ocr_worker
-
-def scan_models():
-    used_models = get_setting_models('all')
-    if not used_models:
-        print("[scan] use_models: skip scan.")
-        return
-    print(f"[scan] 检查模型: {', '.join(used_models)}")
-    for model_name in used_models:
-        if not has_model(model_name):
-            print(f"[scan] {model_name} 未安装，开始下载。")
-            download_model(model_name)
+from task_queue import chat_worker, ocr_worker, tts_worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    workers = [asyncio.create_task(chat_worker()), asyncio.create_task(ocr_worker())]
+    workers = [
+        asyncio.create_task(chat_worker()),
+        asyncio.create_task(ocr_worker()),
+        asyncio.create_task(tts_worker()),
+    ]
     try:
         yield
     finally:
@@ -41,6 +35,11 @@ async def add_headers(request, call_next):
     response.headers["x-strack-llm-pipeline-version"] = "1.0.0"
     response.headers["min-strack-version"] = "1.1.0"
     return response
+
+create_web_dir()
+
+app.mount("/public", StaticFiles(directory="public"), name="public")
+app.mount("/", StaticFiles(directory="app"), name="app")
 
 def main():
     scan_models()

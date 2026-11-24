@@ -18,14 +18,14 @@ async def get_models():
 
 class LLMRequest(BaseModel):
     type: Literal["llm"]
-    model_type: Literal["chat", "ocr"]
+    model_type: Literal["chat", "ocr", "tts"]
     model_name: str
     input_type: Literal["text", "image"]
     user_input: str
     think_mode: bool
 class QueueRequest(BaseModel):
     type: Literal["queue"]
-    model_type: Literal["chat", "ocr"]
+    model_type: Literal["chat", "ocr", "tts"]
     tid: Optional[str] = None
 
 ClientRequest = LLMRequest | QueueRequest
@@ -63,6 +63,12 @@ async def chat_ws(websocket: WebSocket):
                         add_task(
                             tid, req.model_type, req.model_name, websocket, [{"role": "user", "content": req.user_input}],
                             on_result=lambda content: put_session_cache(tid, {"role": "assistant", "content": content}),
+                        )
+                        continue
+                    elif req.model_type == "tts":
+                        # 文本转语音，参考音频固定使用内置音色
+                        add_task(
+                            tid, req.model_type, req.model_name, websocket, [{"role": "user", "content": req.user_input}],
                         )
                         continue
                 except ValueError:

@@ -125,6 +125,7 @@
   .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
   .msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 12px; padding: 2px; }
   .msg.error { align-self: center; color: var(--red); background: transparent; font-size: 12px; }
+  .msg audio { width: 320px; max-width: 100%; margin-top: 4px; display: block; }
   #raw {
     border-top: 1px solid var(--border);
     max-height: 150px;
@@ -163,6 +164,7 @@
       <select id="modelType">
         <option value="chat">chat</option>
         <option value="ocr">ocr</option>
+        <option value="tts">tts</option>
       </select>
     </div>
     <div>
@@ -188,8 +190,8 @@
     </div>
 
     <p class="hint">
-      发送 chat 请求走文字输入；选择 ocr 时发送图片。<br>
-      服务端逐 chunk 返回，助手消息会实时追加。
+      发送 chat 请求走文字输入；选择 ocr 时发送图片；选择 tts 时发送要朗读的文本。<br>
+      服务端逐 chunk 返回，助手消息会实时追加；tts 完成后返回可播放的音频 URL。
     </p>
   </aside>
 
@@ -252,7 +254,8 @@
   function renderModelNames() {
     const type = $("modelType").value;
     const select = $("modelName");
-    const names = state.models.models || [];
+    const byType = state.models.model_list || {};
+    const names = byType[type] || state.models.models || [];
     select.innerHTML = "";
     names.forEach((name) => {
       const opt = document.createElement("option");
@@ -308,6 +311,18 @@
       }
       state.lastBubble.querySelector(".body").textContent += text;
       logEl.scrollTop = logEl.scrollHeight;
+    } else if (data.type === "tts") {
+      const c = data.content || {};
+      const div = addMsg("assistant", "", "tts · tid " + String(data.tid).slice(0, 8));
+      if (c.url) {
+        const audio = document.createElement("audio");
+        audio.controls = true;
+        audio.src = state.baseHttp + c.url;
+        div.appendChild(audio);
+      } else {
+        div.querySelector(".body").textContent = JSON.stringify(c);
+      }
+      logEl.scrollTop = logEl.scrollHeight;
     } else if (data.type === "queue") {
       const c = data.content || {};
       $("queueBox").textContent =
@@ -346,6 +361,22 @@
         think_mode: $("thinkMode").checked,
       };
       addMsg("user", "[图片] " + ($("imageFile").files[0]?.name || ""));
+    } else if (modelType === "tts") {
+      const text = $("input").value.trim();
+      if (!text) {
+        addMsg("error", "请输入要朗读的文本");
+        return;
+      }
+      payload = {
+        type: "llm",
+        model_type: "tts",
+        model_name: modelName,
+        input_type: "text",
+        user_input: text,
+        think_mode: false,
+      };
+      addMsg("user", "[TTS] " + text);
+      $("input").value = "";
     } else {
       const text = $("input").value.trim();
       if (!text) return;

@@ -2,6 +2,7 @@
     "chat": [
         {
             "name": "Qwen3-0.6B",
+            "adapter": "llama",
             "models": [
                 {
                     "modelscope_id": "unsloth/Qwen3-0.6B-GGUF",
@@ -20,6 +21,7 @@
     "ocr": [
         {
             "name": "PaddleOCR-VL-1.6",
+            "adapter": "llama",
             "models": [
                 {
                     "modelscope_id": "PaddlePaddle/PaddleOCR-VL-1.6-GGUF",
@@ -43,6 +45,8 @@
     "tts": [
         {
             "name": "MOSS-TTS-Nano-100M",
+            "adapter": "python_entrypoint",
+            "entrypoint": "moss_tts_nano_onnx",
             "models": [
                 {
                     "folder": "MOSS-TTS-Nano-100M-ONNX",

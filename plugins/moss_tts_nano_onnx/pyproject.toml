@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moss-tts-nano"
+version = "0.1.0"
+description = "Open-source realtime multilingual tiny TTS from OpenMOSS."
+readme = "README_zh.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "OpenMOSS Team" },
+]
+dependencies = [
+  "numpy>=1.24",
+  "sentencepiece>=0.1.99",
+  "soundfile",
+  "onnxruntime>=1.20.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenMOSS/MOSS-TTS-Nano"
+Repository = "https://github.com/OpenMOSS/MOSS-TTS-Nano"
+Documentation = "https://studio.mosi.cn/docs/moss-tts-nano"
+
+[tool.setuptools]
+py-modules = [
+  "onnx_tts_runtime",
+  "ort_cpu_runtime",
+  "text_normalization_pipeline",
+  "tts_robust_normalizer_single_script",
+]

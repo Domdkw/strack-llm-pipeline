@@ -2,7 +2,7 @@
     "use_models": {
         "chat": ["Qwen3-0.6B"],
         "ocr": ["PaddleOCR-VL-1.6"],
-        "tts": []
+        "tts": ["MOSS-TTS-Nano-100M"]
     },
     "llama_params": {
         "temperature": 0.8,
