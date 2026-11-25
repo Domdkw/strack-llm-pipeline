@@ -40,6 +40,37 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "PP-OCRv6",
+            "adapter": "python_entrypoint",
+            "entrypoint": "rapidocr",
+            "models": [
+                {
+                    "modelscope_id": "RapidAI/RapidOCR",
+                    "folder": "PP-OCRv6",
+                    "modelscope_path": "onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx",
+                    "files": [
+                        {
+                            "name": "PP-OCRv6_det_small.onnx",
+                            "type": "onnx",
+                            "size": -1
+                        }
+                    ]
+                },
+                {
+                    "modelscope_id": "RapidAI/RapidOCR",
+                    "folder": "PP-OCRv6",
+                    "modelscope_path": "onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx",
+                    "files": [
+                        {
+                            "name": "PP-OCRv6_rec_small.onnx",
+                            "type": "onnx",
+                            "size": -1
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "tts": [

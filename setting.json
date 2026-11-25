@@ -1,7 +1,7 @@
 {
     "use_models": {
         "chat": ["Qwen3-0.6B"],
-        "ocr": ["PaddleOCR-VL-1.6"],
+        "ocr": ["PaddleOCR-VL-1.6", "PP-OCRv6"],
         "tts": ["MOSS-TTS-Nano-100M"]
     },
     "llama_params": {

@@ -6,7 +6,7 @@ import llama_runtime
 import os
 
 chat_completion = None
-ocr_completion = None
+ocr_completions: dict[str, object] = {}
 tts_completion = None
 
 def build_llama_params():
@@ -39,17 +39,22 @@ def create_chat_model(model_name: str):
     return chat_completion
 
 def create_ocr_model(model_name: str):
-    global ocr_completion
-    if not ocr_completion:
-        model_info = get_target_support_model('ocr', model_name)
-        if not model_info or len(model_info["models"]) == 0:
-            raise ValueError(f"Model {model_name} not found.")
-        if model_info['adapter'] == "llama":
-            gguf_path = get_type_file_path(model_info["models"][0], "gguf")
-            mmproj_path = get_type_file_path(model_info["models"][0], "mmproj")
-            jinja_path = get_type_file_path(model_info["models"][0], "jinja")
-            temperature, n = build_llama_params()
-            ocr_completion = llama_runtime.OCRModel(gguf_path, mmproj_path, jinja_path, temperature=temperature, n=n)
+    if model_name in ocr_completions:
+        return ocr_completions[model_name]
+    model_info = get_target_support_model('ocr', model_name)
+    if not model_info or len(model_info["models"]) == 0:
+        raise ValueError(f"Model {model_name} not found.")
+    ocr_completion = None
+    if model_info['adapter'] == "llama":
+        gguf_path = get_type_file_path(model_info["models"][0], "gguf")
+        mmproj_path = get_type_file_path(model_info["models"][0], "mmproj")
+        jinja_path = get_type_file_path(model_info["models"][0], "jinja")
+        temperature, n = build_llama_params()
+        ocr_completion = llama_runtime.OCRModel(gguf_path, mmproj_path, jinja_path, temperature=temperature, n=n)
+    elif model_info['adapter'] == "python_entrypoint":
+        ocr_completion = get_pyEntrypoint_instance(model_info)
+    if ocr_completion is not None:
+        ocr_completions[model_name] = ocr_completion
     return ocr_completion
 
 def create_tts_model(model_name: str):
@@ -66,7 +71,7 @@ def create_tts_model(model_name: str):
 
 def close_ocr_model(model_instance) -> None:
     """关闭 OCR 模型；若仍是缓存实例则同步清空缓存，避免后续任务复用已关闭实例。"""
-    global ocr_completion
-    if ocr_completion is model_instance:
-        ocr_completion = None
+    for name, cached in list(ocr_completions.items()):
+        if cached is model_instance:
+            del ocr_completions[name]
     model_instance.close()

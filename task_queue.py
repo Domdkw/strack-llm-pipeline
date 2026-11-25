@@ -3,7 +3,12 @@ from typing import TYPE_CHECKING
 import asyncio
 import os
 from dataclasses import dataclass
-from model_bootstrap import create_chat_model, create_ocr_model, close_ocr_model, create_tts_model
+from model_bootstrap import (
+    create_chat_model,
+    create_ocr_model,
+    close_ocr_model,
+    create_tts_model,
+)
 from configs import get_setting_models
 from utils import ROOT_DIR
 import base64
@@ -16,6 +21,7 @@ if TYPE_CHECKING:
 # test  TTS 音色克隆使用的内置参考音频
 TTS_PROMPT_AUDIO = os.path.join(ROOT_DIR, "test", "prompt_audio.mp3")
 
+
 @dataclass
 class Task:
     tid: str
@@ -26,9 +32,11 @@ class Task:
     result: str = ""  # 模型完整输出
     on_result: callable | None = None  # 输出收集回调，参数为完整文本
 
+
 chat_queue = asyncio.Queue[Task](maxsize=100)
 ocr_queue = asyncio.Queue[Task](maxsize=10)
 tts_queue = asyncio.Queue[Task](maxsize=3)
+
 
 def _detect_image_mime(data: bytes) -> str | None:
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -38,6 +46,7 @@ def _detect_image_mime(data: bytes) -> str | None:
     if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
         return "image/webp"
     return None
+
 
 def parse_ocr_image(content: str) -> tuple[bytes, str]:
     """解析 OCR 输入，返回 (图片字节, mime)。支持 data URI 与裸 Base64。"""
@@ -49,7 +58,7 @@ def parse_ocr_image(content: str) -> tuple[bytes, str]:
         header, sep, payload = content.partition(",")
         if not sep or not header.startswith("data:image/") or ";base64" not in header:
             raise ValueError("OCR input must be base64 encoded image")
-        declared_mime = header[len("data:"):-len(";base64")]
+        declared_mime = header[len("data:") : -len(";base64")]
     try:
         raw = base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError):
@@ -58,11 +67,15 @@ def parse_ocr_image(content: str) -> tuple[bytes, str]:
     if mime is None:
         raise ValueError("OCR input must be base64 encoded image")
     if declared_mime and declared_mime != mime:
-        raise ValueError(f"OCR image mime mismatch: declared {declared_mime}, actual {mime}")
+        raise ValueError(
+            f"OCR image mime mismatch: declared {declared_mime}, actual {mime}"
+        )
     return raw, mime
+
 
 def verify_ocr_input(message: dict) -> None:
     parse_ocr_image(message.get("content"))
+
 
 def queue_status(model_type: str, tid: str | None = None) -> dict:
     if model_type == "chat":
@@ -81,19 +94,29 @@ def queue_status(model_type: str, tid: str | None = None) -> dict:
     }
     return status
 
-def add_task(tid: str, model_type: str, model_name: str, ws: WebSocket, messages: list[dict], on_result: callable | None = None) -> None:
+
+def add_task(
+    tid: str,
+    model_type: str,
+    model_name: str,
+    ws: WebSocket,
+    messages: list[dict],
+    on_result: callable | None = None,
+) -> None:
     used_models = get_setting_models(model_type)
     if model_name not in used_models:
         raise ValueError(f"Model {model_name} not found in {model_type} models")
     if model_type == "chat":
         model_instance = create_chat_model(model_name)
-        chat_queue.put_nowait(Task(
-            tid=tid,
-            model_instance=model_instance,
-            ws_instance=ws,
-            messages=list[dict](messages),
-            on_result=on_result,
-        ))
+        chat_queue.put_nowait(
+            Task(
+                tid=tid,
+                model_instance=model_instance,
+                ws_instance=ws,
+                messages=list[dict](messages),
+                on_result=on_result,
+            )
+        )
     elif model_type == "ocr":
         if not messages:
             raise ValueError("OCR input must be base64 encoded image")
@@ -103,25 +126,30 @@ def add_task(tid: str, model_type: str, model_name: str, ws: WebSocket, messages
         if not content.startswith("data:"):
             _, mime = parse_ocr_image(content)
             content = f"data:{mime};base64,{content}"
-        ocr_queue.put_nowait(Task(
-            tid=tid,
-            model_instance=model_instance,
-            ws_instance=ws,
-            messages=[{"role": "user", "content": content}],
-        ))
+        ocr_queue.put_nowait(
+            Task(
+                tid=tid,
+                model_instance=model_instance,
+                ws_instance=ws,
+                messages=[{"role": "user", "content": content}],
+            )
+        )
     elif model_type == "tts":
         if not messages or not str(messages[0].get("content", "")).strip():
             raise ValueError("TTS input text must not be empty")
         model_instance = create_tts_model(model_name)
-        tts_queue.put_nowait(Task(
-            tid=tid,
-            model_instance=model_instance,
-            ws_instance=ws,
-            messages=list[dict](messages),
-            on_result=on_result,
-        ))
+        tts_queue.put_nowait(
+            Task(
+                tid=tid,
+                model_instance=model_instance,
+                ws_instance=ws,
+                messages=list[dict](messages),
+                on_result=on_result,
+            )
+        )
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
+
 
 def forEach_chunk(response, callback: callable):
     parts = []
@@ -132,6 +160,7 @@ def forEach_chunk(response, callback: callable):
             parts.append(text)
             callback(text)
     return "".join(parts)
+
 
 async def _stream_task(task: Task, invoke: callable):
     """在线程中执行阻塞的模型调用，并把 chunk 逐个发回 WebSocket。"""
@@ -153,13 +182,15 @@ async def _stream_task(task: Task, invoke: callable):
             text = await chunks.get()
             if text is None:
                 break
-            await task.ws_instance.send_json({
-                "type": "llm",
-                "tid": task.tid,
-                "model_type": task.model_instance.instance_type,
-                "message_len": len(task.messages),
-                "content": { "chunk": text },
-            })
+            await task.ws_instance.send_json(
+                {
+                    "type": "llm",
+                    "tid": task.tid,
+                    "model_type": task.model_instance.instance_type,
+                    "message_len": len(task.messages),
+                    "content": {"chunk": text},
+                }
+            )
     finally:
         try:
             task.result = await work
@@ -175,7 +206,9 @@ async def chat_worker():
         try:
             task.status = "running"
             # 调用模型（阻塞操作放到线程，避免卡住事件循环）
-            content = await _stream_task(task, lambda: task.model_instance.chat(task.messages, max_tokens=1024))
+            content = await _stream_task(
+                task, lambda: task.model_instance.chat(task.messages, max_tokens=1024)
+            )
             task.result = content
             task.status = "done"
             if task.on_result:
@@ -185,12 +218,18 @@ async def chat_worker():
         finally:
             chat_queue.task_done()
 
+
 async def ocr_worker():
     while True:
         task = await ocr_queue.get()
         try:
             task.status = "running"
-            content = await _stream_task(task, lambda: task.model_instance.recognize(task.messages[0]["content"], max_tokens=1024))
+            content = await _stream_task(
+                task,
+                lambda: task.model_instance.recognize(
+                    task.messages[0]["content"], max_tokens=1024
+                ),
+            )
             task.result = content
             task.status = "done"
             if task.on_result:
@@ -199,6 +238,7 @@ async def ocr_worker():
             task.status = "failed"
         finally:
             ocr_queue.task_done()
+
 
 def _synthesize(task: Task) -> dict:
     """在阻塞线程中执行 TTS 音色克隆，返回音频 URL 与采样率。"""
@@ -218,6 +258,7 @@ def _synthesize(task: Task) -> dict:
         "sample_rate": int(result["sample_rate"]),
     }
 
+
 async def tts_worker():
     while True:
         task = await tts_queue.get()
@@ -226,12 +267,14 @@ async def tts_worker():
             result = await asyncio.to_thread(_synthesize, task)
             task.result = result["url"]
             task.status = "done"
-            await task.ws_instance.send_json({
-                "type": "tts",
-                "tid": task.tid,
-                "model_type": "tts",
-                "content": result,
-            })
+            await task.ws_instance.send_json(
+                {
+                    "type": "tts",
+                    "tid": task.tid,
+                    "model_type": "tts",
+                    "content": result,
+                }
+            )
             if task.on_result:
                 task.on_result(result["url"])
         except Exception:
