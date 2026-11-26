@@ -18,7 +18,7 @@ class ChatModel:
     
     def chat(self, messages: list, max_tokens: int = 1024):
         return self.llm.create_chat_completion(
-            messages=[{"role": "system", "content": "你是一个专业的助手，除非用户明确需求，则默认使用中文回答。"}] + messages,
+            messages=messages,
             stream=True,
             temperature=self.temperature,
             max_tokens=max_tokens,

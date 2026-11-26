@@ -93,7 +93,7 @@ def _find_model_path(model_info: dict, keyword: str) -> str | None:
 def create_instance(model_info: dict):
     det_model_path = _find_model_path(model_info, "det")
     rec_model_path = _find_model_path(model_info, "rec")
-    thread = read_setting("llama_params").get("n_threads", 0)
+    thread = read_setting("llama_params").get("n_threads", 2)
     return RapidOcrInstance(
         model_info=model_info,
         det_model_path=det_model_path,

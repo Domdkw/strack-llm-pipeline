@@ -1,0 +1,12 @@
+{
+    "ocr-chat-tts-pipeline": {
+        "chat": {
+            "prompt": [
+                {"role": "system", "content": "你是一个专业的助手，除非用户明确需求，则默认使用中文回答。"}
+            ],
+            "config": {
+                "n_ctx": 2048
+            }
+        }
+    }
+}

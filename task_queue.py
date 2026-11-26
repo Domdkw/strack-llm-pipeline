@@ -9,7 +9,7 @@ from model_bootstrap import (
     close_ocr_model,
     create_tts_model,
 )
-from configs import get_setting_models
+from configs import get_setting_models, get_scene_info
 from utils import ROOT_DIR
 import base64
 import binascii
@@ -101,11 +101,16 @@ def add_task(
     model_name: str,
     ws: WebSocket,
     messages: list[dict],
+    scene: str | None = None,
     on_result: callable | None = None,
 ) -> None:
     used_models = get_setting_models(model_type)
     if model_name not in used_models:
         raise ValueError(f"Model {model_name} not found in {model_type} models")
+
+    scene_prompt = get_scene_info(scene, model_type).get("prompt", [])
+    if scene_prompt:
+        messages = scene_prompt + messages
     if model_type == "chat":
         model_instance = create_chat_model(model_name)
         chat_queue.put_nowait(
@@ -113,7 +118,7 @@ def add_task(
                 tid=tid,
                 model_instance=model_instance,
                 ws_instance=ws,
-                messages=list[dict](messages),
+                messages=list[dict](messages) ,
                 on_result=on_result,
             )
         )

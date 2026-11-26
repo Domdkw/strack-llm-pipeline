@@ -1,10 +1,11 @@
 import json
 import sys
 import os
+import logging
 
 from utils import ROOT_DIR
 
-default_setting = {
+DEFAULT_SETTING = {
     "use_models": {
         "chat": [],
         "ocr": [],
@@ -13,7 +14,7 @@ default_setting = {
     "llama_params": {
         "temperature": 0.8,
         "n_threads": 0,
-        "n_ctx": 4096,
+        "n_ctx": 1024,
         "n_gpu_layers": 0,
         "verbose": False,
     },
@@ -34,8 +35,8 @@ def write_setting(root_key: str, value: str|dict|list|bool|int|float|None):
             setting = data
             return True
     except Exception as e:
-        print(e)
-        print("Failed to write the setting.json.")
+        logging.error(e)
+        logging.error(f"Failed to write the setting.json.")
         sys.exit(1)
 
 def read_setting(key: str):
@@ -50,19 +51,19 @@ def read_setting(key: str):
             setting = data
     except FileNotFoundError:
         with open(os.path.join(ROOT_DIR, "setting.json"), "w", encoding="utf-8") as f:
-            json.dump(default_setting, f, ensure_ascii=False, indent=4)
+            json.dump(DEFAULT_SETTING, f, ensure_ascii=False, indent=4)
             is_setting_updated = True
-            setting = default_setting
-        return default_setting[key]
+            setting = DEFAULT_SETTING
+        return DEFAULT_SETTING[key]
     except Exception as e:
-        print(e)
-        print("Failed to read the setting.json.")
+        logging.error(e)
+        logging.error(f"Failed to read the setting.json.")
         sys.exit(1)
     else:
         if key in data:
             return data[key]
         else:
-            return default_setting[key]
+            return DEFAULT_SETTING[key]
 
 def read_supports():
     global supports
@@ -94,3 +95,26 @@ def get_target_support_model(type: str, model_name: str):
         if block['name'] == model_name:
             return block
     return None
+
+
+scene_prompt = {}
+
+def read_scene_prompt_file():
+    global scene_prompt
+    if scene_prompt:
+        return scene_prompt
+    try:
+        with open(os.path.join(ROOT_DIR, "prompt.json"), "r", encoding="utf-8") as f:
+            scene_prompt = json.load(f)
+    except FileNotFoundError as e:
+        logging.error("Failed to read the prompt.json.")
+        logging.error(e)
+        sys.exit(1)
+    return scene_prompt
+
+def get_scene_info(scene: str | None = None, model_type: str | None = None) -> list[dict]:
+    scene_prompt = read_scene_prompt_file()
+    if scene in scene_prompt:
+        return scene_prompt[scene].get(model_type, [])
+    else:
+        return []

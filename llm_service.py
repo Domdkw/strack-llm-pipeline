@@ -22,6 +22,7 @@ class LLMRequest(BaseModel):
     model_name: str
     input_type: Literal["text", "image"]
     user_input: str
+    scene: Optional[str] = None
     think_mode: bool
 class QueueRequest(BaseModel):
     type: Literal["queue"]
@@ -54,21 +55,21 @@ async def chat_ws(websocket: WebSocket):
                     if req.model_type == "chat":
                         put_session_cache(tid, {"role": "user", "content": req.user_input})
                         add_task(
-                            tid, req.model_type, req.model_name, websocket, get_session_cache(tid),
+                            tid, req.model_type, req.model_name, websocket, scene=req.scene, messages=get_session_cache(tid),
                             on_result=lambda content: put_session_cache(tid, {"role": "assistant", "content": content}),
                         )
                         continue
                     elif req.model_type == "ocr":
                         # no cache image input
                         add_task(
-                            tid, req.model_type, req.model_name, websocket, [{"role": "user", "content": req.user_input}],
+                            tid, req.model_type, req.model_name, websocket, scene=req.scene, messages=[{"role": "user", "content": req.user_input}],
                             on_result=lambda content: put_session_cache(tid, {"role": "assistant", "content": content}),
                         )
                         continue
                     elif req.model_type == "tts":
                         # 文本转语音，参考音频固定使用内置音色
                         add_task(
-                            tid, req.model_type, req.model_name, websocket, [{"role": "user", "content": req.user_input}],
+                            tid, req.model_type, req.model_name, websocket, scene=req.scene, messages=[{"role": "user", "content": req.user_input}],
                         )
                         continue
                 except ValueError:
