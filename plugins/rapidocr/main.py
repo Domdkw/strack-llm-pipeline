@@ -1,5 +1,6 @@
 import base64
 import binascii
+import logging
 import os
 
 from rapidocr_onnxruntime import RapidOCR
@@ -7,6 +8,8 @@ from rapidocr_onnxruntime import RapidOCR
 from configs import read_setting
 from plugin_mount import ModelInstance
 from utils import MODEL_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def _decode_data_uri(uri: str) -> bytes:
@@ -72,10 +75,12 @@ class RapidOcrInstance(ModelInstance):
     def runtime(self) -> str:
         return 'onnxruntime'
 
-    def recognize(self, uri: str, _max_tokens: int = 1024):
+    def recognize(self, uri: str, *, max_tokens: int = 1024):
         image_bytes = _decode_data_uri(uri)
+        logger.info("OCR 识别开始 image_bytes=%s", len(image_bytes))
         result, _ = self.engine(image_bytes)
         lines = _format_result(result).split("\n") if result else []
+        logger.info("OCR 识别完成 lines=%s", len(lines))
         for index, line in enumerate(lines):
             yield _chunk(line + ("\n" if index < len(lines) - 1 else ""))
 
@@ -93,7 +98,12 @@ def _find_model_path(model_info: dict, keyword: str) -> str | None:
 def create_instance(model_info: dict):
     det_model_path = _find_model_path(model_info, "det")
     rec_model_path = _find_model_path(model_info, "rec")
+    if not det_model_path or not os.path.isfile(det_model_path):
+        raise FileNotFoundError(f"OCR det model not found: {det_model_path}")
+    if not rec_model_path or not os.path.isfile(rec_model_path):
+        raise FileNotFoundError(f"OCR rec model not found: {rec_model_path}")
     thread = read_setting("llama_params").get("n_threads", 2)
+    logger.info("初始化 RapidOCR det=%s rec=%s thread=%s", det_model_path, rec_model_path, thread)
     return RapidOcrInstance(
         model_info=model_info,
         det_model_path=det_model_path,

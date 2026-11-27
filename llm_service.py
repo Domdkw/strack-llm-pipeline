@@ -1,12 +1,15 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, Literal
+import logging
 import uuid
 
 from configs import get_setting_models, read_setting
 from task_queue import add_task, queue_status
 
 api = APIRouter(prefix="/api/v1")
+
+logger = logging.getLogger(__name__)
 
 @api.get("/models")
 async def get_models():
@@ -45,6 +48,7 @@ def get_session_cache(tid: str) -> list[dict]:
 async def chat_ws(websocket: WebSocket):
     await websocket.accept()
     tid = str(uuid.uuid4())
+    #logger.info("WebSocket 已连接 tid=%s client=%s", tid, websocket.client)
     try:
         while True:
             raw_data = await websocket.receive_json()
@@ -52,6 +56,16 @@ async def chat_ws(websocket: WebSocket):
             if switch == "llm":
                 try:
                     req = LLMRequest.model_validate(raw_data)
+                except ValueError:
+                    logger.warning("非法 llm 请求 tid=%s: %s", tid, raw_data)
+                    await websocket.send_json({
+                        "type": raw_data.get("model_type", "llm"),
+                        "tid": tid,
+                        "model_type": raw_data.get("model_type", "llm"),
+                        "content": {"error": "invalid request"},
+                    })
+                    continue
+                try:
                     if req.model_type == "chat":
                         put_session_cache(tid, {"role": "user", "content": req.user_input})
                         add_task(
@@ -72,12 +86,20 @@ async def chat_ws(websocket: WebSocket):
                             tid, req.model_type, req.model_name, websocket, scene=req.scene, messages=[{"role": "user", "content": req.user_input}],
                         )
                         continue
-                except ValueError:
+                except ValueError as e:
+                    logger.warning("add_task 失败 tid=%s model=%s: %s", tid, req.model_name, e)
+                    await websocket.send_json({
+                        "type": req.model_type,
+                        "tid": tid,
+                        "model_type": req.model_type,
+                        "content": {"error": str(e)},
+                    })
                     continue
             elif switch == "queue":
                 try:
                     req = QueueRequest.model_validate(raw_data)
                 except ValueError:
+                    logger.warning("非法 queue 请求 tid=%s: %s", tid, raw_data)
                     continue
                 await websocket.send_json({
                     "type": "queue",
@@ -88,7 +110,10 @@ async def chat_ws(websocket: WebSocket):
             else:
                 continue
     except WebSocketDisconnect:
-        pass
+        logger.info("WebSocket 断开 tid=%s", tid)
+    except Exception:
+        logger.exception("WebSocket 处理异常 tid=%s", tid)
     finally:
         if tid in ws_session:
             del ws_session[tid]
+        logger.info("WebSocket 会话结束 tid=%s", tid)

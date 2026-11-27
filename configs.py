@@ -97,24 +97,24 @@ def get_target_support_model(type: str, model_name: str):
     return None
 
 
-scene_prompt = {}
+scene_config = {}
 
-def read_scene_prompt_file():
-    global scene_prompt
-    if scene_prompt:
-        return scene_prompt
+def read_scene_config_file():
+    global scene_config
+    if scene_config:
+        return scene_config
     try:
-        with open(os.path.join(ROOT_DIR, "prompt.json"), "r", encoding="utf-8") as f:
-            scene_prompt = json.load(f)
-    except FileNotFoundError as e:
-        logging.error("Failed to read the prompt.json.")
+        with open(os.path.join(ROOT_DIR, "scene.json"), "r", encoding="utf-8") as f:
+            scene_config = json.load(f)
+    except FileNotFoundError:
+        logging.warning("scene.json not found, scene config disabled.")
+    except json.JSONDecodeError as e:
+        logging.error("Failed to parse scene.json.")
         logging.error(e)
-        sys.exit(1)
-    return scene_prompt
+    return scene_config
 
-def get_scene_info(scene: str | None = None, model_type: str | None = None) -> list[dict]:
-    scene_prompt = read_scene_prompt_file()
-    if scene in scene_prompt:
-        return scene_prompt[scene].get(model_type, [])
-    else:
-        return []
+def get_scene_info(scene: str | None = None, model_type: str | None = None) -> dict:
+    scene_config = read_scene_config_file()
+    if scene in scene_config:
+        return scene_config[scene].get(model_type, {})
+    return {}

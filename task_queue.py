@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import asyncio
+import logging
 import os
+import traceback
 from dataclasses import dataclass
 from model_bootstrap import (
     create_chat_model,
@@ -13,6 +15,7 @@ from configs import get_setting_models, get_scene_info
 from utils import ROOT_DIR
 import base64
 import binascii
+from plugin_mount import register_temp_file
 
 if TYPE_CHECKING:
     from plugin_mount import ModelInstance
@@ -20,6 +23,8 @@ if TYPE_CHECKING:
 
 # test  TTS 音色克隆使用的内置参考音频
 TTS_PROMPT_AUDIO = os.path.join(ROOT_DIR, "test", "prompt_audio.mp3")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -108,7 +113,11 @@ def add_task(
     if model_name not in used_models:
         raise ValueError(f"Model {model_name} not found in {model_type} models")
 
-    scene_prompt = get_scene_info(scene, model_type).get("prompt", [])
+    try:
+        scene_prompt = get_scene_info(scene, model_type).get("prompt", [])
+    except Exception:
+        logger.warning("读取场景提示词失败 (scene=%s, model_type=%s)", scene, model_type, exc_info=True)
+        scene_prompt = []
     if scene_prompt:
         messages = scene_prompt + messages
     if model_type == "chat":
@@ -154,6 +163,9 @@ def add_task(
         )
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
+    logger.info("任务已入队 tid=%s model_type=%s model=%s queue_size=%s",
+                tid, model_type, model_name,
+                (chat_queue if model_type == "chat" else ocr_queue if model_type == "ocr" else tts_queue).qsize())
 
 
 def forEach_chunk(response, callback: callable):
@@ -205,9 +217,33 @@ async def _stream_task(task: Task, invoke: callable):
                 close_ocr_model(task.model_instance)
     return task.result
 
+async def _fail_task(task: Task, error: Exception) -> None:
+    """记录任务失败日志并通知客户端，避免任务静默失败。"""
+    task.status = "failed"
+    logger.error(
+        "任务失败 tid=%s model_type=%s model=%s\n%s",
+        task.tid,
+        task.model_instance.instance_type,
+        getattr(task.model_instance, "model_name", "?"),
+        "".join(traceback.format_exception(error)),
+    )
+    try:
+        await task.ws_instance.send_json(
+            {
+                "type": task.model_instance.instance_type,
+                "tid": task.tid,
+                "model_type": task.model_instance.instance_type,
+                "content": {"error": str(error)},
+            }
+        )
+    except Exception:
+        logger.warning("失败通知发送失败 tid=%s（连接可能已断开）", task.tid)
+
+
 async def chat_worker():
     while True:
         task = await chat_queue.get()
+        logger.info("任务开始 tid=%s model=%s", task.tid, task.model_instance.model_name)
         try:
             task.status = "running"
             # 调用模型（阻塞操作放到线程，避免卡住事件循环）
@@ -216,10 +252,11 @@ async def chat_worker():
             )
             task.result = content
             task.status = "done"
+            logger.info("任务完成 tid=%s content_len=%s", task.tid, len(content))
             if task.on_result:
                 task.on_result(content)
-        except Exception:
-            task.status = "failed"  # 避免单个任务异常导致 worker 退出
+        except Exception as e:
+            await _fail_task(task, e)  # 避免单个任务异常导致 worker 退出
         finally:
             chat_queue.task_done()
 
@@ -227,6 +264,7 @@ async def chat_worker():
 async def ocr_worker():
     while True:
         task = await ocr_queue.get()
+        logger.info("任务开始 tid=%s model=%s", task.tid, task.model_instance.model_name)
         try:
             task.status = "running"
             content = await _stream_task(
@@ -237,10 +275,11 @@ async def ocr_worker():
             )
             task.result = content
             task.status = "done"
+            logger.info("任务完成 tid=%s content_len=%s", task.tid, len(content))
             if task.on_result:
                 task.on_result(content)
-        except Exception:
-            task.status = "failed"
+        except Exception as e:
+            await _fail_task(task, e)
         finally:
             ocr_queue.task_done()
 
@@ -250,16 +289,15 @@ def _synthesize(task: Task) -> dict:
     if not os.path.isfile(TTS_PROMPT_AUDIO):
         raise FileNotFoundError(f"TTS prompt audio not found: {TTS_PROMPT_AUDIO}")
     text = str(task.messages[0].get("content", "")).strip()
-    output_dir = os.path.join(ROOT_DIR, "public", "tts")
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{task.tid}.wav")
+    # 输出到带过期时间的临时文件（不过期），由 /public/temp 静态目录对外提供
+    output_path = register_temp_file(file_name=f"{task.tid}.wav", expires=0, public=True)
     result = task.model_instance.synthesize(
         text=text,
         prompt_audio_path=TTS_PROMPT_AUDIO,
         output_audio_path=output_path,
     )
     return {
-        "url": f"/public/tts/{task.tid}.wav",
+        "url": f"/public/temp/{os.path.basename(output_path)}",
         "sample_rate": int(result["sample_rate"]),
     }
 
@@ -267,11 +305,13 @@ def _synthesize(task: Task) -> dict:
 async def tts_worker():
     while True:
         task = await tts_queue.get()
+        logger.info("任务开始 tid=%s model=%s", task.tid, task.model_instance.model_name)
         try:
             task.status = "running"
             result = await asyncio.to_thread(_synthesize, task)
             task.result = result["url"]
             task.status = "done"
+            logger.info("任务完成 tid=%s url=%s", task.tid, result["url"])
             await task.ws_instance.send_json(
                 {
                     "type": "tts",
@@ -282,7 +322,7 @@ async def tts_worker():
             )
             if task.on_result:
                 task.on_result(result["url"])
-        except Exception:
-            task.status = "failed"
+        except Exception as e:
+            await _fail_task(task, e)
         finally:
             tts_queue.task_done()

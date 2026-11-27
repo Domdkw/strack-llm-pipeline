@@ -3,7 +3,10 @@ from utils import MODEL_DIR
 from plugin_mount import get_pyEntrypoint_instance
 
 import llama_runtime
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 chat_completion = None
 ocr_completions: dict[str, object] = {}
@@ -35,6 +38,7 @@ def create_chat_model(model_name: str):
         if model_info['adapter'] == "llama":
             gguf_path = get_type_file_path(model_info["models"][0], "gguf")
             temperature, n = build_llama_params()
+            logger.info("加载 Chat 模型 %s gguf=%s", model_name, gguf_path)
             chat_completion = llama_runtime.ChatModel(gguf_path, temperature=temperature, n=n)
     return chat_completion
 
@@ -50,6 +54,7 @@ def create_ocr_model(model_name: str):
         mmproj_path = get_type_file_path(model_info["models"][0], "mmproj")
         jinja_path = get_type_file_path(model_info["models"][0], "jinja")
         temperature, n = build_llama_params()
+        logger.info("加载 OCR 模型 %s gguf=%s", model_name, gguf_path)
         ocr_completion = llama_runtime.OCRModel(gguf_path, mmproj_path, jinja_path, temperature=temperature, n=n)
     elif model_info['adapter'] == "python_entrypoint":
         ocr_completion = get_pyEntrypoint_instance(model_info)
@@ -75,3 +80,4 @@ def close_ocr_model(model_instance) -> None:
         if cached is model_instance:
             del ocr_completions[name]
     model_instance.close()
+    logger.info("gc collect ocr")

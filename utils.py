@@ -1,9 +1,11 @@
 import os
-
+#import tempfile
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 PLUGIN_DIR = os.path.join(ROOT_DIR, "plugins")
+PUBLIC_DIR = os.path.join(ROOT_DIR, "public")
+PUBLIC_TEMP_DIR = os.path.join(PUBLIC_DIR, "temp")
 
 def create_web_dir():
     if not os.path.exists(os.path.join(ROOT_DIR, "public")):
